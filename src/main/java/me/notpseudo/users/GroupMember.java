@@ -1,17 +1,17 @@
 package me.notpseudo.users;
 
-import org.javacord.api.entity.user.User;
-
-import java.util.Optional;
-
 public class GroupMember {
 
     private final long USERID;
     private GroupMember giftReceiver;
+    private String wishlist;
+    private String extra;
 
     public GroupMember(long userID) {
         USERID = userID;
         giftReceiver = null;
+        wishlist = null;
+        extra = null;
     }
 
     public long getUserID() {
@@ -22,12 +22,24 @@ public class GroupMember {
         return giftReceiver;
     }
 
-    public void setGiftReceiver(User user) {
-        giftReceiver = new GroupMember(user.getId());
-    }
-
     public void setGiftReceiver(long receiverID) {
         giftReceiver = new GroupMember(receiverID);
+    }
+
+    public String getWishlist() {
+        return wishlist;
+    }
+
+    public void setWishlist(String wishlist) {
+        this.wishlist = wishlist;
+    }
+
+    public String getExtraInfo() {
+        return extra;
+    }
+
+    public void setExtraInfo(String extra) {
+        this.extra = extra;
     }
 
     @Override
@@ -43,6 +55,6 @@ public class GroupMember {
 
     @Override
     public String toString() {
-        return "GroupMember [ USERID: " + USERID + ", giftReceiver: " + giftReceiver + " ]";
+        return "GroupMember [ USERID: " + USERID + ", giftReceiver: " + giftReceiver + ", wishlist: " + wishlist + ", extra: " + extra + " ]";
     }
 }
