@@ -1,10 +1,13 @@
 package me.notpseudo.listeners;
 
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import me.notpseudo.SecretSantaBot;
 import me.notpseudo.users.GroupMember;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.javacord.api.DiscordApi;
 import org.javacord.api.event.interaction.ModalSubmitEvent;
 import org.javacord.api.interaction.ModalInteraction;
@@ -16,7 +19,8 @@ public class WishlistListener implements ModalSubmitListener {
     private static final MongoDatabase USER_DATABASE;
 
     static {
-        USER_DATABASE = SecretSantaBot.getClient().getDatabase("users");
+        MongoClient client = MongoClients.create(SecretSantaBot.getMongoToken());
+        USER_DATABASE = client.getDatabase("users");
     }
 
     public WishlistListener(DiscordApi api) {
@@ -34,8 +38,22 @@ public class WishlistListener implements ModalSubmitListener {
             member.setWishlist(wishlist);
             member.setExtraInfo(extraInfo);
             MongoCollection<Document> documents = USER_DATABASE.getCollection(s.getIdAsString());
-        }, () -> {});
-
+            Document document = documents.find(new Document("memberid", userID)).first();
+            boolean found = true;
+            if (document == null) {
+                document = new Document("memberid", userID);
+                found = false;
+            }
+            document.put("wishlist", wishlist);
+            document.put("extrainfo", extraInfo);
+            Bson query = new Document("memberid",  userID);
+            if (found) {
+                documents.replaceOne(query, document);
+            } else {
+                documents.insertOne(document);
+            }
+            interaction.respondLater(true).join().setContent("Updated!").update();
+        }, () -> interaction.respondLater(true).join().setContent("You must use this in the server you want the wishlist to be applied to").update());
     }
 
 }

@@ -24,11 +24,13 @@ public class MessageButtonListener implements MessageComponentCreateListener {
 
     private final DiscordApi API;
     private static final MongoDatabase SERVER_DATABASE;
+    private static final MongoDatabase USER_DATABASE;
     private static Set<Long> endIDs = new HashSet<>();
 
     static {
         MongoClient client = MongoClients.create(SecretSantaBot.getMongoToken());
         SERVER_DATABASE = client.getDatabase("servers");
+        USER_DATABASE = client.getDatabase("users");
     }
 
     public MessageButtonListener(DiscordApi api) {
@@ -38,8 +40,23 @@ public class MessageButtonListener implements MessageComponentCreateListener {
     @Override
     public void onComponentCreate(MessageComponentCreateEvent createEvent) {
         MessageComponentInteraction interaction = createEvent.getMessageComponentInteraction();
-        InteractionOriginalResponseUpdater responseUpdater = interaction.respondLater(true).join();
         interaction.getServer().ifPresentOrElse(s -> {
+            if (interaction.getCustomId().equals("editlist")) {
+                sendModal(interaction);
+                return;
+            }
+            InteractionOriginalResponseUpdater responseUpdater = interaction.respondLater(true).join();
+            long userID = interaction.getUser().getId();
+            if (interaction.getCustomId().equals("viewlist")) {
+                MongoCollection<Document> userDocs = USER_DATABASE.getCollection(s.getIdAsString());
+                Document userDoc = userDocs.find(new Document("memberid", userID)).first();
+                if (userDoc == null) {
+                    responseUpdater.setContent("You have not made a wishlist yet!").update();
+                    return;
+                }
+                responseUpdater.setContent("Your Wishlist: \n```" + userDoc.getString("wishlist") + "```\nYour instructions/info: \n``` " + userDoc.getString("extrainfo") + " ```").update();
+                return;
+            }
             String serverID = s.getIdAsString();
             MongoCollection<Document> documents = SERVER_DATABASE.getCollection(serverID);
             long messageID = interaction.getMessage().getId();
@@ -53,7 +70,6 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                 userArray = new ArrayList<>();
             }
             Set<GroupMember> userSet = JSONUtils.getMembers(userArray);
-            long userID = interaction.getUser().getId();
             GroupMember member = new GroupMember(userID);
             switch (interaction.getCustomId()) {
                 case "join" -> {
@@ -78,14 +94,6 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         responseUpdater.setContent("You are not part of this group").update();
                     }
                 }
-                case "editlist" -> {
-                    responseUpdater.setContent("Enter your wishlist into the modal!").update();
-                    interaction.respondWithModal("wishlist", "Tell us what you wish for!",
-                            ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "List Your Wish Items Here", true)),
-                            ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info here"))
-                    );
-                    return;
-                }
                 case "viewreceiver" -> {
                     if (!document.getBoolean("started")) {
                         responseUpdater.setContent("The host has not started this group yet! Wait for the group to start to be assigned someone to get a gift for").update();
@@ -96,13 +104,21 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         responseUpdater.setContent("You do not have a gift receiver or there was an error finding your receiver").update();
                         return;
                     }
-                    API.getUserById(foundMember.getGiftReceiver().getUserID()).whenComplete((r, error) -> {
+                    API.getUserById(foundMember.getGiftReceiver().getUserID()).whenComplete((receiver, error) -> {
                         if (error != null) {
                             System.out.println("There was an error getting a user by ID");
                             responseUpdater.setContent("There was an error finding your receiver").update();
                             return;
                         }
-                        responseUpdater.setContent("Your gift receiver is " + r.getMentionTag()).update();
+                        MongoCollection<Document> userDocs = USER_DATABASE.getCollection(s.getIdAsString());
+                        Document userDoc = userDocs.find(new Document("memberid", receiver.getId())).first();
+                        String response = "Your gift receiver is " + receiver.getMentionTag() + "\n";
+                        if (userDoc != null) {
+                            response += "Their Wishlist: \n```" + userDoc.getString("wishlist") + "```\nYour instructions/info: \n``` " + userDoc.getString("extrainfo") + " ```";
+                        } else {
+                            response += "They have not made a wishlist yet";
+                        }
+                        responseUpdater.setContent(response).update();
                     });
                 }
                 case "startgroup" -> {
@@ -111,7 +127,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         return;
                     }
                     if (document.getBoolean("started")) {
-                        responseUpdater.setContent("You have already started this group! If there are issues with member assignments, please remake the group with </startgroup:0>").update();
+                        responseUpdater.setContent("You have already started this group! If there are issues with member assignments, please remake the group with </hostgroup:1052739101826228265>").update();
                         return;
                     }
                     if (!startGroup(userSet)) {
@@ -150,7 +166,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
             document.put("users", userArray);
             Bson query = new Document("message",  messageID);
             documents.replaceOne(query, document);
-        }, () -> responseUpdater.setContent("You must use this feature in a server").update());
+        }, () -> interaction.respondLater(true).join().setContent("You must use this feature in a server").update());
 
     }
 
@@ -180,16 +196,43 @@ public class MessageButtonListener implements MessageComponentCreateListener {
         if (group.size() < 2) {
             return false;
         }
+
         Random rand = new Random();
-        GroupMember[] members = group.toArray(new GroupMember[0]);
-        for (int i = 0; i < members.length; i++) {
-            int receiverIndex = rand.nextInt(members.length);
-            while (receiverIndex == i) {
-                receiverIndex = rand.nextInt(members.length);
+        List<GroupMember> members = new ArrayList<>(group);
+        // Keep track of which members have been assigned as receivers
+        List<GroupMember> receiverAssignments = new ArrayList<>();
+
+        for (GroupMember currentMember : members) {
+            // Create a list of members that can be assigned as receivers for the current member
+            List<GroupMember> potentialReceivers = members.stream()
+                    .filter(member -> member.getUserID() != currentMember.getUserID()) // Exclude current member
+                    .filter(member -> !receiverAssignments.contains(member)).toList();
+
+            if (potentialReceivers.isEmpty()) {
+                // No remaining members to assign as receivers, so we cannot continue
+                return false;
             }
-            members[i].setGiftReceiver(members[receiverIndex].getUserID());
+
+            // Select a random receiver from the potential receivers
+            int receiverIndex = rand.nextInt(potentialReceivers.size());
+            GroupMember receiver = potentialReceivers.get(receiverIndex);
+            // Assign the receiver to the current member
+            currentMember.setGiftReceiver(receiver.getUserID());
+            // Add the receiver to the list of receiver assignments
+            receiverAssignments.add(receiver);
         }
+
         return true;
+    }
+
+    private void sendModal(MessageComponentInteraction interaction) {
+        interaction.respondWithModal("wishlist", "Tell us what you wish for!",
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "List Your Wish Items Here", true)),
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info here"))
+        ).exceptionally(throwable -> {
+            System.out.println(throwable.getMessage());
+            return null;
+        });
     }
 
 }
