@@ -1,7 +1,5 @@
 package me.notpseudo.listeners;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import me.notpseudo.SecretSantaBot;
@@ -10,15 +8,21 @@ import me.notpseudo.util.JSONUtils;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.javacord.api.DiscordApi;
+import org.javacord.api.entity.channel.TextChannel;
+import org.javacord.api.entity.message.Message;
 import org.javacord.api.entity.message.component.ActionRow;
+import org.javacord.api.entity.message.component.Button;
 import org.javacord.api.entity.message.component.TextInput;
 import org.javacord.api.entity.message.component.TextInputStyle;
+import org.javacord.api.entity.message.embed.EmbedBuilder;
 import org.javacord.api.event.interaction.MessageComponentCreateEvent;
 import org.javacord.api.interaction.MessageComponentInteraction;
 import org.javacord.api.interaction.callback.InteractionOriginalResponseUpdater;
 import org.javacord.api.listener.interaction.MessageComponentCreateListener;
 
+import java.awt.*;
 import java.util.*;
+import java.util.List;
 
 public class MessageButtonListener implements MessageComponentCreateListener {
 
@@ -28,9 +32,8 @@ public class MessageButtonListener implements MessageComponentCreateListener {
     private static Set<Long> endIDs = new HashSet<>();
 
     static {
-        MongoClient client = MongoClients.create(SecretSantaBot.getMongoToken());
-        SERVER_DATABASE = client.getDatabase("servers");
-        USER_DATABASE = client.getDatabase("users");
+        SERVER_DATABASE = SecretSantaBot.getServerDatabase();
+        USER_DATABASE = SecretSantaBot.getUserDatabase();
     }
 
     public MessageButtonListener(DiscordApi api) {
@@ -54,7 +57,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                     responseUpdater.setContent("You have not made a wishlist yet!").update();
                     return;
                 }
-                responseUpdater.setContent("Your Wishlist: \n```" + userDoc.getString("wishlist") + "```\nYour instructions/info: \n``` " + userDoc.getString("extrainfo") + " ```").update();
+                responseUpdater.setContent("Your Wishlist: \n```" + userDoc.getString("wishlist") + "```\nYour instructions/info: \n```" + userDoc.getString("extrainfo") + " ```").update();
                 return;
             }
             String serverID = s.getIdAsString();
@@ -114,7 +117,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         Document userDoc = userDocs.find(new Document("memberid", receiver.getId())).first();
                         String response = "Your gift receiver is " + receiver.getMentionTag() + "\n";
                         if (userDoc != null) {
-                            response += "Their Wishlist: \n```" + userDoc.getString("wishlist") + "```\nYour instructions/info: \n``` " + userDoc.getString("extrainfo") + " ```";
+                            response += "Their Wishlist: \n```" + userDoc.getString("wishlist") + "```\nTheir instructions/info: \n```" + userDoc.getString("extrainfo") + " ```";
                         } else {
                             response += "They have not made a wishlist yet";
                         }
@@ -134,6 +137,25 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         responseUpdater.setContent("Could not start this group!").update();
                         return;
                     }
+                    long origMessageId = document.getLong("message"), channelId = document.getLong("channelId");
+                    TextChannel channel = s.getTextChannelById(channelId).orElse(null);
+                    if (channel != null) {
+                        Message origMessage = API.getMessageById(origMessageId, channel).join();
+                        String min = document.getString("min"), max = document.getString("max");
+                        EmbedBuilder embed = new EmbedBuilder()
+                                .setTitle("**Secret Santa Group**")
+                                .setDescription("Group has **STARTED**!\nClick the buttons below to interact with this group!\n> Minimum Gift Value: " + min + "\n> Maximum Gift Value: " + max + "\n> Host: " + API.getUserById(document.getLong("host")).join().getMentionTag())
+                                .setColor(Color.GREEN)
+                                .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                .setTimestampToNow();
+                        origMessage.createUpdater().setContent("").setEmbed(embed).addComponents(
+                                ActionRow.of(
+                                        Button.secondary("viewreceiver", "View Your Person"),
+                                        Button.secondary("editlist", "Edit Your Wishlist")
+                                ),
+                                ActionRow.of(Button.danger("endgroup", "Fully End the Group"))
+                        ).applyChanges().join();
+                    }
                     document.put("started", true);
                     responseUpdater.setContent("Started the group!").update();
                 }
@@ -143,10 +165,22 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         return;
                     }
                     if (endIDs.remove(userID)) {
+                        long origMessageId = document.getLong("message"), channelId = document.getLong("channelId");
+                        TextChannel channel = s.getTextChannelById(channelId).orElse(null);
+                        if (channel != null) {
+                            Message origMessage = API.getMessageById(origMessageId, channel).join();
+                            EmbedBuilder embed = new EmbedBuilder()
+                                    .setTitle("**Secret Santa Group**")
+                                    .setDescription("Group has **ENDED**!")
+                                    .setColor(Color.RED)
+                                    .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                .setTimestampToNow();
+                            origMessage.createUpdater().setContent("").setEmbed(embed).applyChanges().join();
+                        }
                         responseUpdater.setContent("Ended and removed this group").update();
                         documents.deleteOne(new Document("message",  messageID));
                     } else {
-                        responseUpdater.setContent("CAREFUL! This will completely end and remove this group. No other actions will work! Click again in 10 to confirm").update();
+                        responseUpdater.setContent("CAREFUL! This will completely end and remove this group. No other actions will work! Click again within 10 seconds to confirm").update();
                         endIDs.add(userID);
                         Timer timer = new Timer();
                         timer.schedule(new TimerTask() {
@@ -171,16 +205,11 @@ public class MessageButtonListener implements MessageComponentCreateListener {
     }
 
     private static boolean addUser(Set<GroupMember> group, GroupMember member) {
-        for (GroupMember gm : group) {
-            if (gm.equals(member)) {
-                return false;
-            }
-        }
         return group.add(member);
     }
 
     private static boolean removeUser(Set<GroupMember> group, GroupMember member) {
-        return group.removeIf(gm -> gm.equals(member));
+        return group.remove(member);
     }
 
     private static GroupMember findMember(Set<GroupMember> group, long id) {
@@ -226,9 +255,17 @@ public class MessageButtonListener implements MessageComponentCreateListener {
     }
 
     private void sendModal(MessageComponentInteraction interaction) {
+        MongoCollection<Document> userDocs = USER_DATABASE.getCollection(interaction.getServer().get().getIdAsString());
+        Document userDoc = userDocs.find(new Document("memberid", interaction.getUser().getId())).first();
+        String wishList = "";
+        String extraInfo = "";
+        if (userDoc != null) {
+            wishList = userDoc.getString("wishlist");
+            extraInfo =  userDoc.getString("extrainfo");
+        }
         interaction.respondWithModal("wishlist", "Tell us what you wish for!",
-                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "List Your Wish Items Here", true)),
-                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info here"))
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "Wishlist link or individual items/links here", wishList, wishList, true)),
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info or instructions here", extraInfo, extraInfo))
         ).exceptionally(throwable -> {
             System.out.println(throwable.getMessage());
             return null;
