@@ -2,6 +2,7 @@ package me.notpseudo;
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
 import io.github.cdimascio.dotenv.Dotenv;
 import me.notpseudo.listeners.CommandListener;
 import me.notpseudo.listeners.MessageButtonListener;
@@ -19,11 +20,20 @@ public class SecretSantaBot {
 
     private static final String TOKEN;
     private static final String MONGO_TOKEN;
+    private static final MongoClient CLIENT;
+    private static final MongoDatabase SERVER_DATABASE;
+    private static final MongoDatabase USER_DATABASE;
+    private static final long OWNERID;
+    private static String OWNERTAG;
 
     static {
         Dotenv dotenv = Dotenv.load();
         TOKEN = dotenv.get("TOKEN");
         MONGO_TOKEN = dotenv.get("MONGO_TOKEN");
+        OWNERID = Long.parseLong(dotenv.get("OWNERID"));
+        CLIENT = MongoClients.create(SecretSantaBot.getMongoToken());
+        SERVER_DATABASE = CLIENT.getDatabase("servers");
+        USER_DATABASE = CLIENT.getDatabase("users");
     }
 
     public static void main(String[] args) {
@@ -40,6 +50,7 @@ public class SecretSantaBot {
                     .join();
             SlashCommand.with("wishlist", "View or edit your wishlist for a server").createGlobal(api).join();
             SlashCommand.with("help", "Get info about this bot or commands").createGlobal(api).join();
+            OWNERTAG = api.getUserById(OWNERID).join().getMentionTag();
         } catch (CompletionException e) {
             System.out.println("\u001B[31mThere was an issue trying to log in to your bot");
         }
@@ -48,6 +59,22 @@ public class SecretSantaBot {
 
     public static String getMongoToken() {
         return MONGO_TOKEN;
+    }
+
+    public static MongoClient getClient() {
+        return CLIENT;
+    }
+
+    public static MongoDatabase getServerDatabase() {
+        return SERVER_DATABASE;
+    }
+
+    public static MongoDatabase getUserDatabase() {
+        return USER_DATABASE;
+    }
+
+    public static String getOwnerTag() {
+        return OWNERTAG;
     }
 
 }
