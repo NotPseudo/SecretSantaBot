@@ -1,9 +1,9 @@
 package me.notpseudo.listeners;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import me.notpseudo.SecretSantaBot;
+import me.notpseudo.users.GroupMember;
+import me.notpseudo.util.JSONUtils;
 import org.bson.Document;
 import org.javacord.api.DiscordApi;
 import org.javacord.api.entity.channel.TextChannel;
@@ -18,7 +18,9 @@ import org.javacord.api.interaction.callback.InteractionOriginalResponseUpdater;
 import org.javacord.api.listener.interaction.SlashCommandCreateListener;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class CommandListener implements SlashCommandCreateListener {
 
@@ -26,8 +28,7 @@ public class CommandListener implements SlashCommandCreateListener {
     private static final MongoDatabase SERVER_DATABASE;
 
     static {
-        MongoClient client = MongoClients.create(SecretSantaBot.getMongoToken());
-        SERVER_DATABASE = client.getDatabase("servers");
+        SERVER_DATABASE = SecretSantaBot.getServerDatabase();
     }
 
     public CommandListener(DiscordApi api) {
@@ -61,20 +62,22 @@ public class CommandListener implements SlashCommandCreateListener {
                                 .setTitle("**Secret Santa Group**")
                                 .setDescription("Click the buttons below to interact with this group!\n> Minimum Gift Value: " + finalMin + "\n> Maximum Gift Value: " + finalMax + "\n> Host: " + interaction.getUser().getMentionTag())
                                 .setColor(Color.CYAN)
-                                .setFooter("Made by Yume#0505");
+                                .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                .setTimestampToNow();
 
                         MessageBuilder message = new MessageBuilder()
                                 .setContent("")
                                 .setEmbed(embed)
                                 .addComponents(
                                         ActionRow.of(Button.success("join", "Join the Group"),
-                                                Button.danger("leave", "Leave the Group"),
-                                                Button.secondary("viewreceiver", "View Your Person")
+                                                Button.danger("leave", "Leave the Group")
                                         ),
                                         ActionRow.of(Button.success("startgroup", "Start Group and Assign Receivers"),
                                                 Button.danger("endgroup", "Fully End the Group")
                                         )
                                 );
+                        CompletableFuture<Long> messageIdFuture = new CompletableFuture<>();
+                        CompletableFuture<Long> channelIdFuture = new CompletableFuture<>();
                         if (options.size() >= 3) {
                             options.get(2).getChannelValue().ifPresent(channel -> {
                                 if (channel instanceof TextChannel textChannel) {
@@ -83,8 +86,8 @@ public class CommandListener implements SlashCommandCreateListener {
                                             System.out.println("There was an error sending a message to a specified text channel");
                                             return;
                                         }
-                                        Document document = new Document("message", m.getId()).append("host", interaction.getUser().getId()).append("started", false);
-                                        SERVER_DATABASE.getCollection(s.getIdAsString()).insertOne(document);
+                                        messageIdFuture.complete(m.getId());
+                                        channelIdFuture.complete(m.getChannel().getId());
                                     });
                                 } else {
                                     message.send(c).whenComplete((m, error) -> {
@@ -92,8 +95,8 @@ public class CommandListener implements SlashCommandCreateListener {
                                             System.out.println("There was an error sending a message to the original text channel");
                                             return;
                                         }
-                                        Document document = new Document("message", m.getId()).append("host", interaction.getUser().getId()).append("started", false);
-                                        SERVER_DATABASE.getCollection(s.getIdAsString()).insertOne(document);
+                                        messageIdFuture.complete(m.getId());
+                                        channelIdFuture.complete(m.getChannel().getId());
                                     });
                                 }
                             });
@@ -103,10 +106,22 @@ public class CommandListener implements SlashCommandCreateListener {
                                     System.out.println("There was an error sending a message to the original text channel");
                                     return;
                                 }
-                                Document document = new Document("message", m.getId()).append("host", interaction.getUser().getId()).append("started", false);
-                                SERVER_DATABASE.getCollection(s.getIdAsString()).insertOne(document);
+                                messageIdFuture.complete(m.getId());
+                                channelIdFuture.complete(m.getChannel().getId());
                             });
                         }
+                        long userId = interaction.getUser().getId();
+                        Document document = new Document("message", messageIdFuture.join())
+                                .append("channelId", channelIdFuture.join())
+                                .append("host", userId)
+                                .append("started", false)
+                                .append("min", finalMin)
+                                .append("max", finalMax);
+                        ArrayList<String> users = new ArrayList<>();
+                        users.add(JSONUtils.getJSONString(new GroupMember(userId)));
+                        document.put("users", users);
+                        SERVER_DATABASE.getCollection(s.getIdAsString()).insertOne(document);
+                        responseUpdater.setContent("Group started!").update();
                     }, () -> responseUpdater.setContent("There was an issue!").update());
                 }
                 case "wishlist" -> {
@@ -114,22 +129,15 @@ public class CommandListener implements SlashCommandCreateListener {
                             .setTitle("**Wishlist Info**")
                             .setDescription("Click on the buttons below to view or edit your wishlist for this server. Your wishlists are not global. You have a different list for each server this bot is in")
                             .setColor(Color.CYAN)
-                            .setFooter("Made by Yume#0505");
+                            .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                .setTimestampToNow();
 
-                    MessageBuilder message = new MessageBuilder()
-                            .setContent("")
-                            .setEmbed(embed)
-                            .addComponents(
-                                    ActionRow.of(
-                                            Button.secondary("editlist", "Edit Your Wishlist"),
-                                            Button.secondary("viewlist", "View Your Current Wishlist")
-                                    )
-                            );
-                    interaction.getChannel().ifPresentOrElse(c -> message.send(c).whenComplete((m, err) -> {
-                       if (err != null) {
-                           System.out.println("There was an error sending the message");
-                       }
-                    }), () -> responseUpdater.setContent("There was an issue!").update());
+                    responseUpdater.addEmbed(embed).setContent("").addComponents(
+                            ActionRow.of(
+                                    Button.secondary("editlist", "Edit Your Wishlist"),
+                                    Button.secondary("viewlist", "View Your Current Wishlist")
+                            )
+                    ).update();
                 }
                 case "help" -> interaction.getChannel().ifPresentOrElse(c -> {
                     EmbedBuilder embed = new EmbedBuilder()
@@ -143,7 +151,7 @@ public class CommandListener implements SlashCommandCreateListener {
                                     View or edit your wishlist in a server with the </wishlist:1052738943432536224> command""")
                             .addField("**2. Basic Group Actions**", """
                                     Everyone who sees a group will have the option to join it, leave it, and view their assigned gift receiver
-                                    > **THE HOST MUST STILL JOIN THE GROUP.** The host is not automatically placed into the group. They too must click the button
+                                    > The host is automatically placed into the group.
                                     > You can not join or leave a group after the host has started the group
                                     > You do not have an assigned gift receiver until the host starts the group. Check back later
                                     > When you view your receiver, you will be given their Discord tag and their wishlist, if they made one""")
@@ -161,12 +169,14 @@ public class CommandListener implements SlashCommandCreateListener {
                             .addField("**5. Other Info**", "Invite the Bot to your Server: https://discord.com/api/oauth2/authorize?client_id=1052020092445151254&permissions=148176751680&scope=bot\n" +
                                     "GitHub Repo for this Bot: https://github.com/NotPseudo/SecretSantaBot")
                             .setColor(Color.CYAN)
-                            .setFooter("Made by Yume#0505");
-                    c.sendMessage(embed).whenComplete((m, err) -> {
-                        if (err != null) {
-                            System.out.println("There was an error sending the message");
-                        }
-                    });
+                            .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                .setTimestampToNow();
+                    responseUpdater.addEmbed(embed).update();
+//                    c.sendMessage(embed).whenComplete((m, err) -> {
+//                        if (err != null) {
+//                            System.out.println("There was an error sending the message");
+//                        }
+//                    });
                 }, () -> responseUpdater.setContent("There was an issue!").update());
             }
         }, () -> responseUpdater.setContent("You must use commands in a server").update());
