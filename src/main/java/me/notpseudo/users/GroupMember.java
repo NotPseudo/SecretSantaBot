@@ -57,4 +57,10 @@ public class GroupMember {
     public String toString() {
         return "GroupMember [ USERID: " + USERID + ", giftReceiver: " + giftReceiver + ", wishlist: " + wishlist + ", extra: " + extra + " ]";
     }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(USERID);
+    }
+
 }
