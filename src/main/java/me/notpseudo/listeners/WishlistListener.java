@@ -1,7 +1,5 @@
 package me.notpseudo.listeners;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import me.notpseudo.SecretSantaBot;
@@ -19,8 +17,7 @@ public class WishlistListener implements ModalSubmitListener {
     private static final MongoDatabase USER_DATABASE;
 
     static {
-        MongoClient client = MongoClients.create(SecretSantaBot.getMongoToken());
-        USER_DATABASE = client.getDatabase("users");
+        USER_DATABASE = SecretSantaBot.getUserDatabase();
     }
 
     public WishlistListener(DiscordApi api) {
