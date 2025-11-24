@@ -49,18 +49,23 @@ public class CommandListener implements SlashCommandCreateListener {
                             return;
                         }
                     });
-                    String min = "5", max = "Not specififed";
+                    String groupName = "Group " + interaction.getChannel().get().getIdAsString();
                     if (options.size() >= 1) {
-                        min = options.get(0).getStringValue().orElse("5");
+                        groupName = options.get(0).getStringValue().orElse("Group " + interaction.getChannel().get().getIdAsString());
                     }
+                    String min = "5", max = "Not specififed";
+                    String finalGroupName =  groupName;
                     if (options.size() >= 2) {
-                        max = options.get(1).getStringValue().orElse("Not specified");
+                        min = options.get(1).getStringValue().orElse("5");
+                    }
+                    if (options.size() >= 3) {
+                        max = options.get(2).getStringValue().orElse("Not specified");
                     }
                     String finalMin = min, finalMax = max;
                     interaction.getChannel().ifPresentOrElse(c -> {
                         EmbedBuilder embed = new EmbedBuilder()
                                 .setTitle("**Secret Santa Group**")
-                                .setDescription("Click the buttons below to interact with this group!\n> Minimum Gift Value: " + finalMin + "\n> Maximum Gift Value: " + finalMax + "\n> Host: " + interaction.getUser().getMentionTag())
+                                .setDescription("Click the buttons below to interact with this group!\n## Group Name: " + finalGroupName + "\n- Member Count: `1`\n- Minimum Gift Value: " + finalMin + "\n- Maximum Gift Value: " + finalMax + "\n- Host: " + interaction.getUser().getMentionTag())
                                 .setColor(Color.CYAN)
                                 .addField("Made by ", SecretSantaBot.getOwnerTag())
                                 .setTimestampToNow();
@@ -78,8 +83,8 @@ public class CommandListener implements SlashCommandCreateListener {
                                 );
                         CompletableFuture<Long> messageIdFuture = new CompletableFuture<>();
                         CompletableFuture<Long> channelIdFuture = new CompletableFuture<>();
-                        if (options.size() >= 3) {
-                            options.get(2).getChannelValue().ifPresent(channel -> {
+                        if (options.size() >= 4) {
+                            options.get(3).getChannelValue().ifPresent(channel -> {
                                 if (channel instanceof TextChannel textChannel) {
                                     message.send(textChannel).whenComplete((m, error) -> {
                                         if (error != null) {
@@ -112,6 +117,7 @@ public class CommandListener implements SlashCommandCreateListener {
                         }
                         long userId = interaction.getUser().getId();
                         Document document = new Document("message", messageIdFuture.join())
+                                .append("groupName", finalGroupName)
                                 .append("channelId", channelIdFuture.join())
                                 .append("host", userId)
                                 .append("started", false)
@@ -143,7 +149,7 @@ public class CommandListener implements SlashCommandCreateListener {
                     EmbedBuilder embed = new EmbedBuilder()
                             .setAuthor("SecretSantaBot", "https://discord.com/api/oauth2/authorize?client_id=1052020092445151254&permissions=148176751680&scope=bot", "https://images-ext-2.discordapp.net/external/KX6W6aNQdxt_D9lko6uV_1c6IvomCgPcoTDqARJ0XOA/%3Fsize%3D4096/https/cdn.discordapp.com/avatars/1052020092445151254/28d5919df312e6e35c8599cd5b7a7248.png?width=905&height=905")
                             .setTitle("**Secret Santa Bot Info**")
-                            .setDescription("This is an information panel for the Secret Santa Bot. Don't worry! There aren;t too many commands, and the bot should be simple to use")
+                            .setDescription("This is an information panel for the Secret Santa Bot. Don't worry! There aren't too many commands, and the bot should be simple to use")
                             .addField("**1. Commands**", """
                                     Host a new Secret Santa Group in a server by using the </hostgroup:1052739101826228265> command
                                     > There is a required minimum value option, an optional maximum value option, and an optional channel to send to option

@@ -74,6 +74,10 @@ public class MessageButtonListener implements MessageComponentCreateListener {
             }
             Set<GroupMember> userSet = JSONUtils.getMembers(userArray);
             GroupMember member = new GroupMember(userID);
+            long origMessageId = document.getLong("message"), channelId = document.getLong("channelId");
+            String groupName = document.getString("groupName");
+            TextChannel channel = s.getTextChannelById(channelId).orElse(null);
+            String minimum = document.getString("min"), maximum = document.getString("max");
             switch (interaction.getCustomId()) {
                 case "join" -> {
                     if (document.getBoolean("started")) {
@@ -81,6 +85,16 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         return;
                     }
                     if (addUser(userSet, member)) {
+                        if (channel != null) {
+                            Message origMessage = API.getMessageById(origMessageId, channel).join();
+                            EmbedBuilder embed = new EmbedBuilder()
+                                    .setTitle("**Secret Santa Group**")
+                                    .setDescription("Click the buttons below to interact with this group!\n## Group Name: " + groupName + "\n- Member Count: `" + userSet.size() + "`\n- Minimum Gift Value: " + minimum + "\n- Maximum Gift Value: " + maximum + "\n- Host: " + API.getUserById(document.getLong("host")).join().getMentionTag())
+                                    .setColor(Color.CYAN)
+                                    .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                    .setTimestampToNow();
+                            origMessage.createUpdater().setContent("").setEmbed(embed).applyChanges().join();
+                        }
                         responseUpdater.setContent("You joined the Secret Santa group!").update();
                     } else {
                         responseUpdater.setContent("You are already part of this group").update();
@@ -92,6 +106,16 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         return;
                     }
                     if (removeUser(userSet, member)) {
+                        if (channel != null) {
+                            Message origMessage = API.getMessageById(origMessageId, channel).join();
+                            EmbedBuilder embed = new EmbedBuilder()
+                                    .setTitle("**Secret Santa Group**")
+                                    .setDescription("Click the buttons below to interact with this group!\n## Group Name: " + groupName + "\n- Member Count: `" + userSet.size() + "`\n- Minimum Gift Value: " + minimum + "\n- Maximum Gift Value: " + maximum + "\n- Host: " + API.getUserById(document.getLong("host")).join().getMentionTag())
+                                    .setColor(Color.CYAN)
+                                    .addField("Made by ", SecretSantaBot.getOwnerTag())
+                                    .setTimestampToNow();
+                            origMessage.createUpdater().setContent("").setEmbed(embed).applyChanges().join();
+                        }
                         responseUpdater.setContent("You left the Secret Santa group!").update();
                     } else {
                         responseUpdater.setContent("You are not part of this group").update();
@@ -137,14 +161,12 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         responseUpdater.setContent("Could not start this group!").update();
                         return;
                     }
-                    long origMessageId = document.getLong("message"), channelId = document.getLong("channelId");
-                    TextChannel channel = s.getTextChannelById(channelId).orElse(null);
                     if (channel != null) {
                         Message origMessage = API.getMessageById(origMessageId, channel).join();
                         String min = document.getString("min"), max = document.getString("max");
                         EmbedBuilder embed = new EmbedBuilder()
                                 .setTitle("**Secret Santa Group**")
-                                .setDescription("Group has **STARTED**!\nClick the buttons below to interact with this group!\n> Minimum Gift Value: " + min + "\n> Maximum Gift Value: " + max + "\n> Host: " + API.getUserById(document.getLong("host")).join().getMentionTag())
+                                .setDescription("Group has **STARTED**!\nClick the buttons below to interact with this group!\n## Group Name: " + groupName + "\n- Member Count: " + userSet.size() + "\n- Minimum Gift Value: " + min + "\n- Maximum Gift Value: " + max + "\n- Host: " + API.getUserById(document.getLong("host")).join().getMentionTag())
                                 .setColor(Color.GREEN)
                                 .addField("Made by ", SecretSantaBot.getOwnerTag())
                                 .setTimestampToNow();
@@ -165,13 +187,11 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         return;
                     }
                     if (endIDs.remove(userID)) {
-                        long origMessageId = document.getLong("message"), channelId = document.getLong("channelId");
-                        TextChannel channel = s.getTextChannelById(channelId).orElse(null);
                         if (channel != null) {
                             Message origMessage = API.getMessageById(origMessageId, channel).join();
                             EmbedBuilder embed = new EmbedBuilder()
                                     .setTitle("**Secret Santa Group**")
-                                    .setDescription("Group has **ENDED**!")
+                                    .setDescription("Group has **ENDED**!\n## Group Name: " + groupName)
                                     .setColor(Color.RED)
                                     .addField("Made by ", SecretSantaBot.getOwnerTag())
                                 .setTimestampToNow();
