@@ -175,7 +175,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                                     .setColor(Color.RED)
                                     .addField("Made by ", SecretSantaBot.getOwnerTag())
                                 .setTimestampToNow();
-                            origMessage.createUpdater().setContent("").setEmbed(embed).applyChanges().join();
+                            origMessage.createUpdater().setContent("").setEmbed(embed).removeAllComponents().applyChanges().join();
                         }
                         responseUpdater.setContent("Ended and removed this group").update();
                         documents.deleteOne(new Document("message",  messageID));
