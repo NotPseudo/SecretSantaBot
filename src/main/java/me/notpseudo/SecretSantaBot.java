@@ -41,6 +41,7 @@ public class SecretSantaBot {
             DiscordApi api = new DiscordApiBuilder().setToken(TOKEN).addListener(CommandListener::new).addListener(MessageButtonListener::new).addListener(WishlistListener::new).login().join();
             SlashCommand.with("hostgroup", "Run this command to set up a Secret Santa group and wait for members to join!",
                             Arrays.asList(
+                                    SlashCommandOption.create(SlashCommandOptionType.STRING, "groupname", "Required Group Name", true),
                                     SlashCommandOption.create(SlashCommandOptionType.STRING, "minimum", "Required minimum cost of gift", true),
                                     SlashCommandOption.create(SlashCommandOptionType.STRING, "maximum", "Optional maximum cost of gift", false),
                                     SlashCommandOption.create(SlashCommandOptionType.CHANNEL, "channel", "An optional channel to send the embed in", false)
