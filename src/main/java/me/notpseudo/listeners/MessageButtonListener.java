@@ -177,6 +177,12 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                                 ),
                                 ActionRow.of(Button.danger("endgroup", "Fully End the Group"))
                         ).applyChanges().join();
+                        String mention = "";
+                        for (GroupMember gm : userSet) {
+                            mention += API.getUserById(gm.getUserID()).join().getMentionTag() + " ";
+                        }
+                        mention = "||" + mention +"||\n## " + groupName + " has started!\n" + origMessage.getLink();
+                        channel.sendMessage(mention).join();
                     }
                     document.put("started", true);
                     responseUpdater.setContent("Started the group!").update();
