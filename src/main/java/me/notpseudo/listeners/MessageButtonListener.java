@@ -181,7 +181,7 @@ public class MessageButtonListener implements MessageComponentCreateListener {
                         for (GroupMember gm : userSet) {
                             mention += API.getUserById(gm.getUserID()).join().getMentionTag() + " ";
                         }
-                        mention = "||" + mention +"||\n## " + groupName + " has started!\n" + origMessage.getLink();
+                        mention = "||" + mention +"||\n## " + groupName + " has started! Check who you're buying a gift for using the new buttons:\n" + origMessage.getLink();
                         channel.sendMessage(mention).join();
                     }
                     document.put("started", true);
@@ -290,8 +290,8 @@ public class MessageButtonListener implements MessageComponentCreateListener {
             extraInfo =  userDoc.getString("extrainfo");
         }
         interaction.respondWithModal("wishlist", "Tell us what you wish for!",
-                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "Wishlist link or individual items/links here", wishList, wishList, true)),
-                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info or instructions here", extraInfo, extraInfo))
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "itemlist", "Wishlist link or individual items/links here", "Your Wishlist Here", wishList, true)),
+                ActionRow.of(TextInput.create(TextInputStyle.PARAGRAPH, "extrainfo", "Enter any extra info or instructions here", "Your Instruction Here", extraInfo))
         ).exceptionally(throwable -> {
             System.out.println(throwable.getMessage());
             return null;
